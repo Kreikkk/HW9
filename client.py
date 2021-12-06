@@ -3,29 +3,16 @@ import threading
 from queue import Queue
 from time import time
 
-from sys import argv
+from tools import parse_CL, parse_file
+
 
 TCP_IP = '127.0.0.1'
 TCP_PORT = 15000
 
 
-def parse_file(filename):
-    with open(filename, 'r') as f:
-        urls = f.readlines()
-    urls = [url.replace('\n', '') for url in urls]
-
-    return urls
-
-
-def parse_CL():
-    params = dict(map(lambda x: x.lstrip('--').split('='), argv[1:]))
-    params = {k: int(v) for k, v in params.items()}
-
-    return params
-
 def master():
     params = parse_CL()
-    n_workers = params.get('w', 10)
+    n_workers = int(params.get('w', 10))
     url_fname = params.get('f', 'urls.txt')
     urls = parse_file(url_fname)
     queue = Queue()

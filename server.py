@@ -8,6 +8,8 @@ from select import select
 from sys import argv
 from queue import Queue
 
+from tools import parse_CL
+
 
 SYMBOLS_TO_REMOVE = list(r"1234567890=+*|[](){}.,:;-!?$%#&<>/\"'" + '\n')
 LOCK = threading.Lock()
@@ -19,14 +21,6 @@ server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 server_socket.bind(('localhost', 15000))
 server_socket.listen()
 print('Listening on http://127.0.0.1:15000')
-
-
-def parse_CL():
-    params = dict(map(lambda x: x.lstrip('--').split('='), argv[1:]))
-    params = {k: int(v) for k, v in params.items()}
-
-    return params
-
 
 def accept(server_socket):
     client_socket, _ = server_socket.accept()
@@ -57,8 +51,8 @@ def retrieve_top_words(url, n):
 def master():
     queue = Queue()
     params = parse_CL()
-    n_workers = params.get('w', 10)
-    k_top = params.get('k', 1)
+    n_workers = int(params.get('w', 10))
+    k_top = int(params.get('k', 1))
     global verbose
     global urls_fetched
     verbose = params.get('v', 0)
