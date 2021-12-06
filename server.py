@@ -1,7 +1,7 @@
 import socket
 import threading
-import urllib.request as urllib
 import requests
+import urllib.request as urllib
 
 from collections import Counter
 from select import select
@@ -9,10 +9,11 @@ from sys import argv
 from queue import Queue
 
 
-SYMBOLS_TO_REMOVE = list(r"1234567890=+*|[](){}.,:;-!?$#&<>/\"'" + '\n')
-LOCK = threading.Semaphore(10)
+SYMBOLS_TO_REMOVE = list(r"1234567890=+*|[](){}.,:;-!?$%#&<>/\"'" + '\n')
+LOCK = threading.Lock()
 
 monitor = []
+
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 server_socket.bind(('localhost', 15000))
@@ -30,14 +31,10 @@ def parse_CL():
 def accept(server_socket):
     client_socket, _ = server_socket.accept()
     monitor.append(client_socket)
-    print('Connected client')
 
 
 def retrieve_top_words(url, n):
-    print(url)
-    # with LOCK:
-    data = urllib.urlopen(url)
-    # data = requests.get(url)
+    data = requests.get(url)
 
     words = []
     for line in data:
@@ -57,35 +54,17 @@ def retrieve_top_words(url, n):
     return top_words
 
 
-class Worker(threading.Thread):
-    def __init__(self, queue, k_top, ind):
-        threading.Thread.__init__(self)
-        self.k_top = k_top
-        self.queue = queue
-        self.ind = ind
-
-    def run(self):
-        while True:
-            socket = self.queue.get()
-
-            try:
-                request = socket.recv(4096).decode()
-                response = retrieve_top_words(request, self.k_top)
-                print(f'Worker {self.ind} received url {request}, response {response}')
-                socket.send(str(response).encode())
-            except (ValueError, OSError) as e:
-                # socket.close()
-                # monitor.remove(socket)
-                pass
-                
-
 def master():
+    queue = Queue()
     params = parse_CL()
     n_workers = params.get('w', 10)
     k_top = params.get('k', 1)
-    queue = Queue()
+    global verbose
+    global urls_fetched
+    verbose = params.get('v', 0)
+    urls_fetched = 0
 
-    workers_pool = [Worker(queue, k_top, ind) for ind in range(n_workers)]
+    workers_pool = [threading.Thread(target=fetch, args=(queue, k_top, i)) for i in range(n_workers)]
 
     for worker in workers_pool:
         worker.start()
@@ -96,7 +75,28 @@ def master():
             if socket is server_socket:
                 accept(socket)
             else:
-                queue.put(socket)
+                url = socket.recv(4096).decode()
+                if not url:
+                    continue
+                queue.put((url, socket))
+
+
+def fetch(queue, k_top, ind):
+    while True:
+        url, socket = queue.get()
+        try:
+            response = retrieve_top_words(url, k_top)
+            print(f'Worker {ind} received url {url}, response {response}')
+            socket.send(str(response).encode())
+
+            with LOCK:
+                global urls_fetched
+                urls_fetched += 1
+            global verbose
+            if verbose:
+                print(f'URLs fetched: {urls_fetched}')
+        except (ValueError, OSError) as e:
+            break
 
 
 if __name__ == '__main__':

@@ -1,12 +1,12 @@
 import socket
 import threading
 from queue import Queue
+from time import time
 
 from sys import argv
 
 TCP_IP = '127.0.0.1'
 TCP_PORT = 15000
-BUFFER_SIZE = 4096
 
 
 def parse_file(filename):
@@ -24,37 +24,41 @@ def parse_CL():
     return params
 
 def master():
-    skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    skt.connect((TCP_IP, TCP_PORT))
     params = parse_CL()
     n_workers = params.get('w', 10)
     url_fname = params.get('f', 'urls.txt')
     urls = parse_file(url_fname)
     queue = Queue()
 
-    workers_pool = [Worker(queue, skt, ind) for ind in range(n_workers)]
-    for worker in workers_pool:
-            worker.start()
+    t1 = time()
+    workers_pool = [Worker(queue, ind) for ind in range(n_workers)]
     
     for url in urls:
-        print(f'Adding {url}')
         queue.put(url)
+    
+    for worker in workers_pool:
+        worker.start()
 
     for worker in workers_pool:
             worker.join()
+    print(f'Time = {time() - t1}')
 
 
 class Worker(threading.Thread):
-    def __init__(self, queue, skt, ind):
+    def __init__(self, queue, ind):
         threading.Thread.__init__(self)
-        self.socket = skt
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.connect((TCP_IP, TCP_PORT))
         self.queue = queue
         self.ind = ind
 
     def run(self):
         while True:
-            url = self.queue.get().encode()
-            self.socket.send(url)
+            if self.queue.empty():
+                break
+            
+            url = self.queue.get()
+            self.socket.send(url.encode())
             response = self.socket.recv(4096).decode()
             print(f'Worker {self.ind} sent {url}, received {response}')
 
